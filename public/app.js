@@ -8,7 +8,7 @@ import { LANGS, lang, setLang, t, genreLabel, moodLabel, eraLabel, examples, app
 const GENRES = ['Reggaeton', 'Trap latino', 'Pop', 'Pop latino', 'Rap', 'R&B', 'Rock', 'Indie', 'Electrónica', 'House', 'Salsa', 'Bachata', 'Dembow', 'Corridos', 'Flamenco', 'Afrobeats', 'K-pop', 'Funk brasileño', 'Lo-fi', 'Jazz'];
 const MOODS = ['Fiesta', 'Previa', 'Chill', 'Gym', 'Romántico', 'Despecho', 'Carretera', 'Estudiar', 'Dormir', 'Ducha', 'Cena', 'Verano'];
 
-const LS = { pro: 'vibelist.pro', quota: 'vibelist.quota', lastAI: 'vibelist.lastAI', pending: 'vibelist.pending', history: 'vibelist.history' };
+const LS = { pro: 'vibelist.pro', quota: 'vibelist.quota', lastAI: 'vibelist.lastAI', pending: 'vibelist.pending', history: 'vibelist.history', proCode: 'vibelist.proCode' };
 const AI_COOLDOWN_MS = 46_000; // IA gratis: 1 respuesta cada ~45 s por IP
 
 const state = {
@@ -42,35 +42,85 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
-/* ───────────── Plan Pro (pago único con Stripe Payment Link) ───────────── */
-// Pro se guarda en este navegador tras volver de Stripe con ?pro_session=cs_…
-// (no hay servidor: la IA es gratuita para todos, Pro solo quita límites).
+/* ───────────── Plan Pro (suscripción mensual con Stripe) ───────────── */
+// El servidor (worker/worker.js) firma una licencia que caduca en 3 días y se
+// renueva sola mientras la suscripción siga activa en Stripe.
 const SESSION_RE = /^cs_(test|live)_[A-Za-z0-9]{10,}$/;
-const isPro = () => SESSION_RE.test(store.get(LS.pro) || '');
+function licence() {
+  const tok = store.get(LS.pro);
+  if (typeof tok !== 'string' || !tok.includes('.')) return null;
+  try {
+    const p = JSON.parse(atob(tok.split('.')[0].replace(/-/g, '+').replace(/_/g, '/')));
+    return { tok, exp: Number(p.exp) || 0 };
+  } catch { return null; }
+}
+const isPro = () => (licence()?.exp || 0) > Date.now();
 const maxSongs = () => (isPro() ? CONFIG.PRO_MAX_SONGS : CONFIG.FREE_MAX_SONGS);
 
-function buyPro() {
-  if (!CONFIG.PRO_PAYMENT_LINK) return;
-  const u = new URL(CONFIG.PRO_PAYMENT_LINK);
-  u.searchParams.set('locale', lang);
-  location.href = u.toString();
+async function api(path, body) {
+  const res = await fetch(CONFIG.API_BASE + path, body
+    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
+    : undefined);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) { const e = new Error(data.error || res.status); e.status = res.status; throw e; }
+  return data;
 }
 
-function unlockPro(code, fromCheckout) {
-  if (!SESSION_RE.test(code)) return false;
-  store.set(LS.pro, code);
+async function buyPro() {
+  const b = $('buyPro');
+  b.disabled = true;
+  try {
+    const { url } = await api('/checkout', { lang });
+    location.href = url;
+  } catch {
+    toast(t('err.pay'));
+    b.disabled = false;
+  }
+}
+
+async function claimPro(sessionId, fromCheckout) {
+  if (!SESSION_RE.test(sessionId)) return false;
+  try {
+    const { token } = await api(`/claim?session_id=${encodeURIComponent(sessionId)}`);
+    store.set(LS.pro, token);
+    store.set(LS.proCode, sessionId);
+  } catch { return false; }
   renderPlan();
+  renderHistory();
   if (fromCheckout) {
     $('licenseOut').textContent = t('license.save');
-    $('licenseInput').value = code;
+    $('licenseInput').value = sessionId;
     document.querySelector('.restore').open = true;
     toast(t('toast.proOn'));
   }
   return true;
 }
 
-function applyLicense() {
-  const ok = unlockPro($('licenseInput').value.trim(), false);
+// Renueva la licencia si caduca en menos de 2 días; si Stripe dice que la
+// suscripción ya no está activa, se quita Pro.
+async function refreshPro() {
+  const l = licence();
+  if (!l || l.exp - Date.now() > 2 * 86400_000) return;
+  try {
+    const { token } = await api('/refresh', { token: l.tok });
+    store.set(LS.pro, token);
+  } catch (e) {
+    if (e.status === 401 || e.status === 402) store.del(LS.pro);
+  }
+  renderPlan();
+  renderHistory();
+}
+
+async function managePro() {
+  try {
+    const { url } = await api('/portal', { token: licence()?.tok });
+    location.href = url;
+  } catch { toast(t('err.pay')); }
+}
+
+async function applyLicense() {
+  $('licenseOut').textContent = '…';
+  const ok = await claimPro($('licenseInput').value.trim(), false);
   $('licenseOut').textContent = ok ? t('license.ok') : t('license.bad');
 }
 
@@ -487,11 +537,11 @@ function renderPlanLists() {
 function renderPlan() {
   const pro = isPro();
   $('planBadge').hidden = !pro;
-  const on = Boolean(CONFIG.PRO_PAYMENT_LINK);
   $('buyPro').hidden = pro;
-  $('buyPro').disabled = !on;
-  $('buyPro').textContent = t(on ? 'btn.buy' : 'btn.soon');
-  $('proPrice').innerHTML = `${esc(CONFIG.PRO_PRICE)}<small>${esc(t('plan.once'))}</small>`;
+  $('buyPro').disabled = false;
+  $('buyPro').textContent = t('btn.buy');
+  $('managePro').hidden = !pro;
+  $('proPrice').innerHTML = `${esc(CONFIG.PRO_PRICE)}<small>${esc(t('plan.month'))}</small>`;
   renderCount();
   renderQuota();
 }
@@ -598,6 +648,7 @@ function bind() {
   $('exportMenu').addEventListener('click', (e) => { const k = e.target.closest('[data-export]')?.dataset.export; if (k) exportAs(k); });
   $('buyPro').addEventListener('click', buyPro);
   $('licenseApply').addEventListener('click', applyLicense);
+  $('managePro').addEventListener('click', managePro);
   ['play', 'pause', 'ended'].forEach((ev) => $('player').addEventListener(ev, markPlaying));
 }
 
@@ -614,7 +665,8 @@ async function init() {
     u.searchParams.delete('pro');
     history.replaceState(null, '', u.pathname + u.search);
   }
-  if (proSession) { unlockPro(proSession, true); renderHistory(); renderCount(); }
+  if (proSession) claimPro(proSession, true);
+  else refreshPro();
 
   if (spotify.spotifyEnabled()) {
     const err = await spotify.handleCallback();

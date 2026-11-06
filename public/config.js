@@ -13,10 +13,9 @@ export const CONFIG = {
   FREE_MAX_SONGS: 30,
   FREE_PER_DAY: 3,
   PRO_MAX_SONGS: 500, // en la práctica, sin límite
-  PRO_PRICE: '€4.99',
-  // Enlace de pago de Stripe (pago único). Al pagar, Stripe vuelve a
-  // https://vibelist.astraforge.pp.ua/?pro_session={CHECKOUT_SESSION_ID}
-  PRO_PAYMENT_LINK: 'https://buy.stripe.com/7sY5kF2QX96I4Q3ckHcs800',
+  PRO_PRICE: '1,99 €',
+  // Servidor de suscripciones (Cloudflare Worker, código en worker/worker.js).
+  API_BASE: 'https://vibelist-api.pablocraft528.workers.dev',
 
   // Opcional: tu token de afiliado de Apple (Apple Services Performance Partners).
   // Se añade a los enlaces de Apple Music para cobrar comisión.

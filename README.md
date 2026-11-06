@@ -18,7 +18,7 @@ No usa datos de Spotify para recomendar: su política prohíbe analizarlos o pas
 
 ## Modelo de negocio
 
-| | Gratis | Pro (4,99 € pago único, IVA incluido) |
+| | Gratis | Pro (1,99 €/mes, IVA incluido) |
 |---|---|---|
 | Playlists | 3 al día | ilimitadas |
 | Canciones | hasta 30 | ilimitadas |
@@ -27,7 +27,7 @@ No usa datos de Spotify para recomendar: su política prohíbe analizarlos o pas
 | Cambiar una canción por otra parecida | — | sí |
 | Historial de playlists | — | sí |
 
-- El cobro es un **Stripe Payment Link** (`PRO_PAYMENT_LINK` en `public/config.js`). Stripe gestiona IVA y facturas (Managed Payments, 3,5 % por venta).
+- El cobro es una **suscripción de Stripe** gestionada por el Cloudflare Worker de `worker/worker.js` (`API_BASE` en `public/config.js`). Secreto `STRIPE_SECRET_KEY`; variables `STRIPE_PRICE_ID` y `SITE_URL`. Stripe gestiona IVA y facturas.
 - Al pagar, Stripe redirige a `/?pro_session={CHECKOUT_SESSION_ID}` y la web activa Pro en ese navegador. No hay servidor ni claves secretas.
 - Limitación conocida: sin servidor, Pro no se verifica contra Stripe (alguien con conocimientos podría activarlo a mano). Como Pro no cuesta nada mantenerlo, es aceptable para empezar.
 - Opcional: enlaces de afiliado de Apple Music (`APPLE_AFFILIATE_TOKEN`).
