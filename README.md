@@ -44,7 +44,7 @@ Abre <http://127.0.0.1:5173/>.
 
 GitHub Pages publica `public/` en cada push a `main` (`.github/workflows/pages.yml`), con el dominio `vibelist.astraforge.pp.ua` (`public/CNAME`). El DNS del dominio está en Cloudflare: `CNAME vibelist → pablosanchezcontento-afk.github.io` (sin proxy).
 
-Al activar la cuenta de Stripe, crea el mismo enlace de pago en modo real y sustituye `PRO_PAYMENT_LINK`.
+El enlace de pago es el real (modo live) de la cuenta de Stripe de Pablo.
 
 ## El límite de 5 usuarios de Spotify
 

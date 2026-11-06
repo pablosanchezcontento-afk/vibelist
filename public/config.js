@@ -16,7 +16,7 @@ export const CONFIG = {
   PRO_PRICE: '€4.99',
   // Enlace de pago de Stripe (pago único). Al pagar, Stripe vuelve a
   // https://vibelist.astraforge.pp.ua/?pro_session={CHECKOUT_SESSION_ID}
-  PRO_PAYMENT_LINK: 'https://buy.stripe.com/test_7sY5kF2QX96I4Q3ckHcs800',
+  PRO_PAYMENT_LINK: 'https://buy.stripe.com/7sY5kF2QX96I4Q3ckHcs800',
 
   // Opcional: tu token de afiliado de Apple (Apple Services Performance Partners).
   // Se añade a los enlaces de Apple Music para cobrar comisión.
