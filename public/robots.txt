@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://vibelist.astraforge.pp.ua/sitemap.xml
