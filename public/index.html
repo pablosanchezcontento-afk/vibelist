@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Vibelist — AI playlists made to order</title>
+  <meta name="description" content="Ask for a playlist like you would ask a friend. The AI builds it with real songs you can preview and save to Spotify.">
+  <meta property="og:title" content="Vibelist — AI playlists made to order">
+  <meta property="og:description" content="Tell it the vibe, get a playlist of real songs. Free.">
+  <meta property="og:type" content="website">
+  <meta name="theme-color" content="#0e0c10">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='30' fill='%23ff5a36'/><circle cx='32' cy='32' r='9' fill='%230e0c10'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="bg" aria-hidden="true"><span></span><span></span></div>
+
+  <header class="top">
+    <a class="logo" href="./"><span class="disc" aria-hidden="true"></span>Vibelist</a>
+    <nav class="nav">
+      <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
+      <select id="langSelect" class="lang" aria-label="Language"></select>
+      <span id="planBadge" class="plan-badge" hidden>PRO</span>
+      <div id="account" class="account"></div>
+    </nav>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow" data-i18n="hero.eyebrow">Playlists made to order</p>
+      <h1><span data-i18n="hero.title1">Ask for it like you would ask</span> <em data-i18n="hero.title2">a friend</em>.</h1>
+      <p class="lede" data-i18n="hero.lede"></p>
+
+      <form id="form" class="composer" autocomplete="off">
+        <label class="sr" for="prompt" data-i18n="form.label">What do you want to listen to?</label>
+        <textarea id="prompt" rows="3" maxlength="600" data-i18n-ph="form.placeholder"></textarea>
+
+        <div class="examples" id="examples"></div>
+
+        <details class="options" open>
+          <summary data-i18n="opts.summary">Fine-tune the playlist</summary>
+
+          <div class="field">
+            <span class="label" data-i18n="opts.artists"></span>
+            <div class="tags" id="artistTags">
+              <input id="artistInput" type="text" data-i18n-ph="opts.artistPh">
+            </div>
+            <label class="check"><input type="checkbox" id="onlyArtists"> <span data-i18n="opts.onlyArtists"></span></label>
+          </div>
+
+          <div class="field">
+            <span class="label" data-i18n="opts.genres"></span>
+            <div class="chips" id="genres"></div>
+          </div>
+
+          <div class="field">
+            <span class="label" data-i18n="opts.moods"></span>
+            <div class="chips" id="moods"></div>
+          </div>
+
+          <div class="field">
+            <span class="label" data-i18n="opts.era"></span>
+            <div class="chips single" id="eras"></div>
+          </div>
+
+          <div class="grid2">
+            <div class="field">
+              <label class="label" for="count"><span data-i18n="opts.songs"></span> <output id="countOut">25</output> <span id="countLock" class="lock" hidden>Pro</span></label>
+              <input type="range" id="count" min="10" max="100" step="5" value="25">
+            </div>
+            <div class="field">
+              <label class="label" for="surprise"><span data-i18n="opts.surprise"></span> <output id="surpriseOut"></output></label>
+              <input type="range" id="surprise" min="0" max="100" step="1" value="50">
+              <div class="scale"><span data-i18n="opts.scaleLow"></span><span data-i18n="opts.scaleHigh"></span></div>
+            </div>
+          </div>
+
+          <div class="field row">
+            <label class="check"><input type="checkbox" id="explicit" checked> <span data-i18n="opts.explicit"></span></label>
+            <label class="check"><input type="checkbox" id="isPublic"> <span data-i18n="opts.public"></span></label>
+          </div>
+        </details>
+
+        <button class="btn primary big" id="generate" type="submit"><span data-i18n="btn.generate">Build my playlist</span></button>
+        <p class="quota" id="quota"></p>
+      </form>
+    </section>
+
+    <section id="loading" class="loading" hidden aria-live="polite">
+      <div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <p id="loadingText"></p>
+    </section>
+
+    <p id="error" class="error" role="alert" hidden></p>
+
+    <section id="result" class="result" hidden>
+      <div class="result-head">
+        <div class="cover" id="cover" aria-hidden="true"></div>
+        <div class="meta">
+          <p class="eyebrow" data-i18n="result.eyebrow"></p>
+          <input id="plName" class="pl-name" maxlength="100" data-i18n-aria="result.name">
+          <textarea id="plDesc" class="pl-desc" rows="2" maxlength="250" data-i18n-aria="result.desc"></textarea>
+          <p class="stats" id="stats"></p>
+        </div>
+      </div>
+
+      <ol class="tracks" id="tracks"></ol>
+
+      <div class="actions">
+        <button class="btn primary" id="save" type="button" data-i18n="btn.save"></button>
+        <button class="btn ghost" id="again" type="button" data-i18n="btn.again"></button>
+        <div class="menu">
+          <button class="btn ghost" id="exportBtn" type="button" aria-haspopup="true" aria-expanded="false" data-i18n="btn.export"></button>
+          <div class="menu-list" id="exportMenu" hidden>
+            <button type="button" data-export="copy" data-i18n="exp.copy"></button>
+            <button type="button" data-export="csv" data-i18n="exp.csv"></button>
+            <a href="https://www.tunemymusic.com/transfer" target="_blank" rel="noopener" data-i18n="exp.tmm"></a>
+            <button type="button" data-export="share" data-i18n="exp.share"></button>
+          </div>
+        </div>
+      </div>
+      <p class="hint" id="saveHint"></p>
+    </section>
+
+    <section id="saved" class="saved" hidden>
+      <h2 data-i18n="saved.title"></h2>
+      <p id="savedInfo"></p>
+      <a class="btn primary" id="openLink" target="_blank" rel="noopener" data-i18n="saved.open"></a>
+    </section>
+
+    <section class="how" id="how">
+      <h2 data-i18n="how.title"></h2>
+      <ol class="steps">
+        <li><b data-i18n="how.s1t"></b><span data-i18n="how.s1"></span></li>
+        <li><b data-i18n="how.s2t"></b><span data-i18n="how.s2"></span></li>
+        <li><b data-i18n="how.s3t"></b><span data-i18n="how.s3"></span></li>
+        <li><b data-i18n="how.s4t"></b><span data-i18n="how.s4"></span></li>
+      </ol>
+    </section>
+
+    <section class="pricing" id="pricing">
+      <h2 data-i18n="pricing.title"></h2>
+      <div class="plans">
+        <div class="plan">
+          <h3 data-i18n="plan.free"></h3>
+          <p class="price">0 €</p>
+          <ul id="freeList"></ul>
+        </div>
+        <div class="plan pro">
+          <h3 data-i18n="plan.pro"></h3>
+          <p class="price" id="proPrice">2,99 €</p>
+          <ul id="proList"></ul>
+          <button class="btn primary" id="buyPro" type="button"></button>
+          <button class="btn ghost small" id="managePro" type="button" hidden data-i18n="btn.manage"></button>
+          <details class="restore">
+            <summary data-i18n="restore.q"></summary>
+            <div class="restore-row">
+              <input id="licenseInput" type="text" data-i18n-ph="restore.ph">
+              <button class="btn ghost small" id="licenseApply" type="button" data-i18n="restore.apply"></button>
+            </div>
+            <p class="hint" id="licenseOut"></p>
+          </details>
+        </div>
+      </div>
+      <p class="fine" data-i18n="pricing.fine"></p>
+    </section>
+
+    <section class="faq">
+      <h2 data-i18n="faq.title"></h2>
+      <details><summary data-i18n="faq.q1"></summary><p data-i18n="faq.a1"></p></details>
+      <details><summary data-i18n="faq.q2"></summary><p data-i18n="faq.a2"></p></details>
+      <details><summary data-i18n="faq.q3"></summary><p data-i18n="faq.a3"></p></details>
+    </section>
+  </main>
+
+  <footer class="foot">
+    <nav><a href="privacy.html" data-i18n="foot.privacy">Privacy</a> · <a href="terms.html" data-i18n="foot.terms">Terms</a></nav>
+    <p data-i18n="foot.note"></p>
+  </footer>
+
+  <audio id="player" preload="none"></audio>
+  <script type="module" src="app.js"></script>
+</body>
+</html>
