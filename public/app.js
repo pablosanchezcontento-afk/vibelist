@@ -7,7 +7,6 @@ import { LANGS, lang, setLang, t, genreLabel, moodLabel, eraLabel, examples, app
 /* Claves internas (no se muestran: se traducen con genreLabel/moodLabel). */
 const GENRES = ['Reggaeton', 'Trap latino', 'Pop', 'Pop latino', 'Rap', 'R&B', 'Rock', 'Indie', 'Electrónica', 'House', 'Salsa', 'Bachata', 'Dembow', 'Corridos', 'Flamenco', 'Afrobeats', 'K-pop', 'Funk brasileño', 'Lo-fi', 'Jazz'];
 const MOODS = ['Fiesta', 'Previa', 'Chill', 'Gym', 'Romántico', 'Despecho', 'Carretera', 'Estudiar', 'Dormir', 'Ducha', 'Cena', 'Verano'];
-const PER_MONTH = { en: '/month', es: '/mes', pt: '/mês', fr: '/mois', de: '/Monat', it: '/mese' };
 
 const LS = { pro: 'vibelist.pro', quota: 'vibelist.quota', lastAI: 'vibelist.lastAI', pending: 'vibelist.pending' };
 const AI_COOLDOWN_MS = 46_000; // IA gratis: 1 respuesta cada ~45 s por IP
@@ -20,8 +19,6 @@ const state = {
   result: null, // { name, description, tracks, stats, input }
   me: null,
   busy: false,
-  proOn: false,
-  proPrice: '',
   playingId: null,
 };
 
@@ -45,76 +42,35 @@ function toast(msg) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2800);
 }
 
-/* ───────────── Plan Pro ───────────── */
-const proToken = () => store.get(LS.pro);
-function tokenExp(tok) {
-  try { return JSON.parse(atob(tok.split('.')[0].replace(/-/g, '+').replace(/_/g, '/'))).exp || 0; } catch { return 0; }
-}
-const isPro = () => Boolean(proToken());
+/* ───────────── Plan Pro (pago único con Stripe Payment Link) ───────────── */
+// Pro se guarda en este navegador tras volver de Stripe con ?pro_session=cs_…
+// (no hay servidor: la IA es gratuita para todos, Pro solo quita límites).
+const SESSION_RE = /^cs_(test|live)_[A-Za-z0-9]{10,}$/;
+const isPro = () => SESSION_RE.test(store.get(LS.pro) || '');
 const maxSongs = () => (isPro() ? CONFIG.PRO_MAX_SONGS : CONFIG.FREE_MAX_SONGS);
-const apiBase = () => CONFIG.API_BASE || '';
 
-async function apiPost(path, body) {
-  const res = await fetch(apiBase() + path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
-  const data = await res.json().catch(() => ({}));
-  if (!res.ok) { const e = new Error(data.error || `Error ${res.status}`); e.status = res.status; throw e; }
-  return data;
+function buyPro() {
+  if (!CONFIG.PRO_PAYMENT_LINK) return;
+  const u = new URL(CONFIG.PRO_PAYMENT_LINK);
+  u.searchParams.set('locale', lang);
+  location.href = u.toString();
 }
 
-async function refreshPro() {
-  if (!proToken()) return false;
-  try {
-    const { token } = await apiPost('/api/refresh', { token: proToken() });
-    store.set(LS.pro, token);
-    return true;
-  } catch (e) {
-    if (e.status === 401 || e.status === 402) { store.del(LS.pro); toast(t('toast.proEnded')); }
-    return false;
-  } finally {
-    renderPlan();
-  }
-}
-
-async function loadProConfig() {
-  try {
-    const res = await fetch(`${apiBase()}/api/config`);
-    const cfg = await res.json();
-    state.proOn = !!cfg.pro;
-    state.proPrice = cfg.price || '';
-  } catch { state.proOn = false; }
+function unlockPro(code, fromCheckout) {
+  if (!SESSION_RE.test(code)) return false;
+  store.set(LS.pro, code);
   renderPlan();
-}
-
-async function buyPro() {
-  if (!state.proOn) return;
-  $('buyPro').disabled = true;
-  try { location.href = (await apiPost('/api/checkout')).url; }
-  catch (e) { toast(e.message); $('buyPro').disabled = false; }
-}
-
-async function claimPro(sessionId) {
-  try {
-    const res = await fetch(`${apiBase()}/api/claim?session_id=${encodeURIComponent(sessionId)}`);
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error || t('err.proFail'));
-    store.set(LS.pro, data.token);
-    renderPlan();
+  if (fromCheckout) {
     $('licenseOut').textContent = t('license.save');
-    $('licenseInput').value = data.token;
+    $('licenseInput').value = code;
+    document.querySelector('.restore').open = true;
     toast(t('toast.proOn'));
-  } catch (e) { showError(e.message); }
+  }
+  return true;
 }
 
-async function managePro() {
-  try { location.href = (await apiPost('/api/portal', { token: proToken() })).url; }
-  catch (e) { toast(e.message); }
-}
-
-async function applyLicense() {
-  const tok = $('licenseInput').value.trim();
-  if (!tok) return;
-  store.set(LS.pro, tok);
-  const ok = await refreshPro();
+function applyLicense() {
+  const ok = unlockPro($('licenseInput').value.trim(), false);
   $('licenseOut').textContent = ok ? t('license.ok') : t('license.bad');
 }
 
@@ -161,19 +117,6 @@ async function freeBrief(input, exclude) {
     } catch (e) { lastErr = e.message === 'bad-format' ? new Error(t('err.aiFormat')) : e; }
   }
   throw lastErr;
-}
-
-async function proBrief(input, exclude) {
-  if (tokenExp(proToken()) < Date.now() + 60_000) await refreshPro();
-  if (!isPro()) return null;
-  try {
-    return (await apiPost('/api/ai', { token: proToken(), input, exclude })).brief;
-  } catch (e) {
-    if (e.message === 'expired' && await refreshPro()) return (await apiPost('/api/ai', { token: proToken(), input, exclude })).brief;
-    if (e.status === 429) throw e;
-    console.warn('Pro AI unavailable, using free AI:', e.message);
-    return null;
-  }
 }
 
 /* ───────────── Flujo principal ───────────── */
@@ -252,7 +195,7 @@ async function generate({ more = false } = {}) {
   $('saved').hidden = true;
   setLoading(true);
   try {
-    const brief = (isPro() && await proBrief(input, exclude)) || await freeBrief(input, exclude);
+    const brief = await freeBrief(input, exclude);
     const { tracks, stats } = await buildPlaylist(input, brief, {
       exclude: excludeKeys,
       onStatus: (key, vars) => { clearInterval(loadingTimer); $('loadingText').textContent = t(key, vars); },
@@ -470,11 +413,11 @@ function renderPlanLists() {
 function renderPlan() {
   const pro = isPro();
   $('planBadge').hidden = !pro;
-  $('managePro').hidden = !pro || !state.proOn;
+  const on = Boolean(CONFIG.PRO_PAYMENT_LINK);
   $('buyPro').hidden = pro;
-  $('buyPro').disabled = !state.proOn;
-  $('buyPro').textContent = t(state.proOn ? 'btn.buy' : 'btn.soon');
-  $('proPrice').innerHTML = `${esc(state.proPrice || CONFIG.PRO_PRICE)}<small>${esc(PER_MONTH[lang] || PER_MONTH.en)}</small>`;
+  $('buyPro').disabled = !on;
+  $('buyPro').textContent = t(on ? 'btn.buy' : 'btn.soon');
+  $('proPrice').innerHTML = `${esc(CONFIG.PRO_PRICE)}<small>${esc(t('plan.once'))}</small>`;
   renderCount();
   renderQuota();
 }
@@ -573,7 +516,6 @@ function bind() {
   document.addEventListener('click', (e) => { if (!e.target.closest('.menu')) { $('exportMenu').hidden = true; $('exportBtn').setAttribute('aria-expanded', 'false'); } });
   $('exportMenu').addEventListener('click', (e) => { const k = e.target.closest('[data-export]')?.dataset.export; if (k) exportAs(k); });
   $('buyPro').addEventListener('click', buyPro);
-  $('managePro').addEventListener('click', managePro);
   $('licenseApply').addEventListener('click', applyLicense);
   ['play', 'pause', 'ended'].forEach((ev) => $('player').addEventListener(ev, markPlaying));
 }
@@ -582,7 +524,6 @@ async function init() {
   bind();
   renderLanguage();
   readShareParams();
-  loadProConfig();
 
   const params = new URLSearchParams(location.search);
   const proSession = params.get('pro_session');
@@ -592,8 +533,7 @@ async function init() {
     u.searchParams.delete('pro');
     history.replaceState(null, '', u.pathname + u.search);
   }
-  if (proSession) claimPro(proSession);
-  else if (isPro() && tokenExp(proToken()) < Date.now() + 86400_000) refreshPro();
+  if (proSession) unlockPro(proSession, true);
 
   if (spotify.spotifyEnabled()) {
     const err = await spotify.handleCallback();

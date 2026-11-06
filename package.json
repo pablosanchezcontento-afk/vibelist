@@ -3,10 +3,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "node serve.mjs",
-    "deploy": "wrangler deploy"
-  },
-  "dependencies": {
-    "@anthropic-ai/sdk": "^1.6.0"
+    "dev": "node serve.mjs"
   }
 }
