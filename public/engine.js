@@ -285,6 +285,8 @@ export async function buildPlaylist(input, brief, { onStatus = () => {}, exclude
     if (hardEra && t.year && (t.year < hardEra[0] || t.year > hardEra[1])) continue;
     if (BAD_VERSION.test(t.title) || BAD_VERSION.test(t.album || '')) continue;
     const isReq = artistParts(t.artist).some((p) => reqKeys.has(p));
+    // Un artista "parecido" de otro género no entra salvo sorpresa máxima.
+    if (genreRes.length && t.role === 'similar' && !t.aiPick && !genreOk(t.genre) && input.surprise < 90) continue;
     if (input.onlyArtists && requested.length && !isReq) continue;
     const key = `${norm(t.title)}|${norm(firstArtist(t.artist))}`;
     if (exclude.has(key)) continue;
