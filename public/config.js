@@ -12,7 +12,7 @@ export const CONFIG = {
   // Límites del plan gratis.
   FREE_MAX_SONGS: 30,
   FREE_PER_DAY: 3,
-  PRO_MAX_SONGS: 100,
+  PRO_MAX_SONGS: 500, // en la práctica, sin límite
   PRO_PRICE: '€4.99',
   // Enlace de pago de Stripe (pago único). Al pagar, Stripe vuelve a
   // https://vibelist.astraforge.pp.ua/?pro_session={CHECKOUT_SESSION_ID}

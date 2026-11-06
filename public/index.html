@@ -8,37 +8,38 @@
   <meta property="og:title" content="Vibelist — AI playlists made to order">
   <meta property="og:description" content="Tell it the vibe, get a playlist of real songs. Free.">
   <meta property="og:type" content="website">
-  <meta name="theme-color" content="#0e0c10">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><circle cx='32' cy='32' r='30' fill='%23ff5a36'/><circle cx='32' cy='32' r='9' fill='%230e0c10'/></svg>">
+  <meta name="theme-color" content="#F6F7FB">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='18' fill='%235B3DF5'/><rect x='14' y='28' width='7' height='20' rx='3.5' fill='white'/><rect x='28.5' y='16' width='7' height='32' rx='3.5' fill='white'/><rect x='43' y='24' width='7' height='24' rx='3.5' fill='%23FF4D8D'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Instrument+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;700;800&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="bg" aria-hidden="true"><span></span><span></span></div>
-
   <header class="top">
-    <a class="logo" href="./"><span class="disc" aria-hidden="true"></span>Vibelist</a>
+    <a class="logo" href="./" aria-label="Vibelist">
+      <span class="mark" aria-hidden="true"><i></i><i></i><i></i></span>Vibelist
+    </a>
     <nav class="nav">
       <a href="#pricing" data-i18n="nav.pricing">Pricing</a>
       <select id="langSelect" class="lang" aria-label="Language"></select>
-      <span id="planBadge" class="plan-badge" hidden>PRO</span>
+      <span id="planBadge" class="plan-badge" hidden>Pro</span>
       <div id="account" class="account"></div>
     </nav>
   </header>
 
   <main>
     <section class="hero">
-      <p class="eyebrow" data-i18n="hero.eyebrow">Playlists made to order</p>
-      <h1><span data-i18n="hero.title1">Ask for it like you would ask</span> <em data-i18n="hero.title2">a friend</em>.</h1>
+      <h1><span data-i18n="hero.title1">Ask for it like you would ask</span> <span data-i18n="hero.title2">a friend</span>.</h1>
       <p class="lede" data-i18n="hero.lede"></p>
 
       <form id="form" class="composer" autocomplete="off">
-        <label class="sr" for="prompt" data-i18n="form.label">What do you want to listen to?</label>
-        <textarea id="prompt" rows="3" maxlength="600" data-i18n-ph="form.placeholder"></textarea>
-
-        <div class="examples" id="examples"></div>
+        <div class="speaker">
+          <div class="vu" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+          <label class="sr" for="prompt" data-i18n="form.label">What do you want to listen to?</label>
+          <textarea id="prompt" rows="3" maxlength="600" data-i18n-ph="form.placeholder"></textarea>
+          <div class="examples" id="examples"></div>
+        </div>
 
         <details class="options" open>
           <summary data-i18n="opts.summary">Fine-tune the playlist</summary>
@@ -70,6 +71,10 @@
             <div class="field">
               <label class="label" for="count"><span data-i18n="opts.songs"></span> <output id="countOut">25</output> <span id="countLock" class="lock" hidden>Pro</span></label>
               <input type="range" id="count" min="10" max="100" step="5" value="25">
+              <div id="exactWrap" class="exact" hidden>
+                <input type="number" id="countExact" min="5" max="500" step="1" value="25" inputmode="numeric">
+                <span data-i18n="opts.exact"></span>
+              </div>
             </div>
             <div class="field">
               <label class="label" for="surprise"><span data-i18n="opts.surprise"></span> <output id="surpriseOut"></output></label>
@@ -90,7 +95,7 @@
     </section>
 
     <section id="loading" class="loading" hidden aria-live="polite">
-      <div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></div>
+      <div class="eq" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
       <p id="loadingText"></p>
     </section>
 
@@ -100,7 +105,6 @@
       <div class="result-head">
         <div class="cover" id="cover" aria-hidden="true"></div>
         <div class="meta">
-          <p class="eyebrow" data-i18n="result.eyebrow"></p>
           <input id="plName" class="pl-name" maxlength="100" data-i18n-aria="result.name">
           <textarea id="plDesc" class="pl-desc" rows="2" maxlength="250" data-i18n-aria="result.desc"></textarea>
           <p class="stats" id="stats"></p>
@@ -131,6 +135,13 @@
       <a class="btn primary" id="openLink" target="_blank" rel="noopener" data-i18n="saved.open"></a>
     </section>
 
+    <section class="history" id="history">
+      <h2 data-i18n="history.title"></h2>
+      <button type="button" class="history-locked" id="historyLocked"><span class="lock">Pro</span> <span data-i18n="history.locked"></span></button>
+      <p class="hint" id="historyEmpty" hidden data-i18n="history.empty"></p>
+      <div class="history-list" id="historyList"></div>
+    </section>
+
     <section class="how" id="how">
       <h2 data-i18n="how.title"></h2>
       <ol class="steps">
@@ -151,7 +162,7 @@
         </div>
         <div class="plan pro">
           <h3 data-i18n="plan.pro"></h3>
-          <p class="price" id="proPrice">2,99 €</p>
+          <p class="price" id="proPrice">€4.99</p>
           <ul id="proList"></ul>
           <button class="btn primary" id="buyPro" type="button"></button>
           <details class="restore">
@@ -176,7 +187,7 @@
   </main>
 
   <footer class="foot">
-    <nav><a href="privacy.html" data-i18n="foot.privacy">Privacy</a> · <a href="terms.html" data-i18n="foot.terms">Terms</a></nav>
+    <nav><a href="privacy.html" data-i18n="foot.privacy">Privacy</a> <a href="terms.html" data-i18n="foot.terms">Terms</a></nav>
     <p data-i18n="foot.note"></p>
   </footer>
 

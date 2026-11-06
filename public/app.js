@@ -8,7 +8,7 @@ import { LANGS, lang, setLang, t, genreLabel, moodLabel, eraLabel, examples, app
 const GENRES = ['Reggaeton', 'Trap latino', 'Pop', 'Pop latino', 'Rap', 'R&B', 'Rock', 'Indie', 'Electrónica', 'House', 'Salsa', 'Bachata', 'Dembow', 'Corridos', 'Flamenco', 'Afrobeats', 'K-pop', 'Funk brasileño', 'Lo-fi', 'Jazz'];
 const MOODS = ['Fiesta', 'Previa', 'Chill', 'Gym', 'Romántico', 'Despecho', 'Carretera', 'Estudiar', 'Dormir', 'Ducha', 'Cena', 'Verano'];
 
-const LS = { pro: 'vibelist.pro', quota: 'vibelist.quota', lastAI: 'vibelist.lastAI', pending: 'vibelist.pending' };
+const LS = { pro: 'vibelist.pro', quota: 'vibelist.quota', lastAI: 'vibelist.lastAI', pending: 'vibelist.pending', history: 'vibelist.history' };
 const AI_COOLDOWN_MS = 46_000; // IA gratis: 1 respuesta cada ~45 s por IP
 
 const state = {
@@ -127,7 +127,7 @@ function readInput() {
     genres: [...state.genres],
     moods: [...state.moods],
     era: state.era,
-    count: Number($('count').value),
+    count: Number(isPro() ? $('countExact').value : $('count').value),
     surprise: Number($('surprise').value),
     onlyArtists: $('onlyArtists').checked,
     explicit: $('explicit').checked,
@@ -143,7 +143,8 @@ function applyInput(input) {
   state.genres = new Set((input.genres || []).filter((g) => GENRES.includes(g)));
   state.moods = new Set((input.moods || []).filter((m) => MOODS.includes(m)));
   state.era = ERA_LABELS.includes(input.era) ? input.era : ERA_LABELS[0];
-  $('count').value = input.count || 25;
+  $('count').value = Math.min(input.count || 25, 100);
+  $('countExact').value = input.count || 25;
   $('surprise').value = input.surprise ?? 50;
   $('onlyArtists').checked = !!input.onlyArtists;
   $('explicit').checked = input.explicit !== false;
@@ -196,18 +197,22 @@ async function generate({ more = false } = {}) {
   setLoading(true);
   try {
     const brief = await freeBrief(input, exclude);
-    const { tracks, stats } = await buildPlaylist(input, brief, {
+    const built = await buildPlaylist(input, brief, {
       exclude: excludeKeys,
       onStatus: (key, vars) => { clearInterval(loadingTimer); $('loadingText').textContent = t(key, vars); },
     });
+    const { tracks, stats } = built;
     if (tracks.length < Math.min(5, input.count)) throw new Error(t('err.notEnough'));
     state.result = {
       name: more && state.result ? $('plName').value : brief.name,
       description: more && state.result ? $('plDesc').value : brief.description,
-      tracks, stats, input,
+      tracks, stats, input, rest: built.rest || [],
     };
     if (!isPro()) spendQuota();
-    renderResult();
+    else saveHistory(state.result);
+    renderResult({ animate: true });
+    renderHistory();
+    if (tracks.length < input.count) toast(t('err.short', { n: tracks.length }));
     renderQuota();
     $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
   } catch (e) {
@@ -322,6 +327,72 @@ function markPlaying() {
   });
 }
 
+/* ───────────── Pro: cambiar canción e historial ───────────── */
+function proOnly() {
+  toast(t('pro.only'));
+  $('pricing').scrollIntoView({ behavior: 'smooth' });
+}
+
+function swapTrack(i) {
+  if (!isPro()) return proOnly();
+  const r = state.result;
+  const old = r.tracks[i];
+  const main = (x) => norm(x.poolArtist || firstArtist(x.artist));
+  const used = new Set(r.tracks.map((x) => x.id));
+  const titles = new Set(r.tracks.map((x) => norm(x.title)));
+  const neighbours = new Set([r.tracks[i - 1], r.tracks[i + 1]].filter(Boolean).map(main));
+  const ok = (x) => !used.has(x.id) && !titles.has(norm(x.title)) && !neighbours.has(main(x));
+  const pool = r.rest || (r.rest = []);
+  let j = pool.findIndex((x) => ok(x) && (main(x) === main(old) || (old.because && x.because === old.because)));
+  if (j < 0) j = pool.findIndex(ok);
+  if (j < 0) return toast(t('toast.noSwap'));
+  const [next] = pool.splice(j, 1);
+  r.tracks[i] = next;
+  renderResult();
+  $('tracks').children[i]?.classList.add('swapped');
+  if (r.savedAt) saveHistory(r, true);
+}
+
+const slim = (x) => ({ id: x.id, title: x.title, artist: x.artist, album: x.album, year: x.year, explicit: x.explicit, art: x.art, artSmall: x.artSmall, preview: x.preview, appleUrl: x.appleUrl, role: x.role, because: x.because, aiPick: x.aiPick, pop: x.pop, poolArtist: x.poolArtist });
+
+function saveHistory(r, update = false) {
+  let list = store.get(LS.history) || [];
+  if (update && r.savedAt) list = list.filter((h) => h.savedAt !== r.savedAt);
+  r.savedAt = r.savedAt || Date.now();
+  list.unshift({ savedAt: r.savedAt, name: r.name, description: r.description, input: r.input, stats: r.stats, tracks: r.tracks.map(slim), rest: (r.rest || []).slice(0, 60).map(slim) });
+  store.set(LS.history, list.slice(0, 20));
+}
+
+function renderHistory() {
+  const box = $('historyList');
+  const pro = isPro();
+  $('historyLocked').hidden = pro;
+  box.replaceChildren();
+  const list = pro ? store.get(LS.history) || [] : [];
+  $('historyEmpty').hidden = !pro || list.length > 0;
+  list.forEach((h) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'hist';
+    const art = h.tracks.find((x) => x.art)?.art;
+    b.innerHTML = `${art ? `<img src="${esc(art)}" alt="">` : '<span class="ph">♪</span>'}<span class="hname">${esc(h.name)}</span><span class="hmeta">${esc(t('history.songs', { n: h.tracks.length }))}, ${esc(new Date(h.savedAt).toLocaleDateString(lang))}</span>`;
+    b.addEventListener('click', () => {
+      state.result = { ...h, tracks: [...h.tracks], rest: [...(h.rest || [])] };
+      renderResult({ animate: true });
+      $('result').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    box.append(b);
+  });
+}
+
+/* El "altavoz": las barras reaccionan al escribir. */
+function bumpVu() {
+  const bars = document.querySelectorAll('.vu i');
+  bars.forEach((bar) => bar.style.setProperty('--h', `${25 + Math.random() * 75}%`));
+  clearTimeout(bumpVu.t);
+  bumpVu.t = setTimeout(() => bars.forEach((bar) => bar.style.removeProperty('--h')), 420);
+}
+
 /* ───────────── Render ───────────── */
 function chip(label, pressed, onClick) {
   const b = document.createElement('button');
@@ -346,9 +417,12 @@ function renderControls() {
 }
 
 function renderCount() {
-  const v = Number($('count').value);
+  const pro = isPro();
+  const v = Number(pro ? $('countExact').value : $('count').value);
   $('countOut').textContent = v;
-  $('countLock').hidden = isPro() || v <= CONFIG.FREE_MAX_SONGS;
+  $('countLock').hidden = pro || v <= CONFIG.FREE_MAX_SONGS;
+  $('exactWrap').hidden = !pro;
+  $('count').hidden = pro;
 }
 
 function renderTags() {
@@ -407,7 +481,7 @@ function renderAccount() {
 function renderPlanLists() {
   const fill = (id, items) => { $(id).innerHTML = items.map((s) => `<li>${esc(s)}</li>`).join(''); };
   fill('freeList', [t('plan.f1', { n: CONFIG.FREE_PER_DAY }), t('plan.f2', { n: CONFIG.FREE_MAX_SONGS }), t('plan.f3'), t('plan.f4')]);
-  fill('proList', [t('plan.p1'), t('plan.p2', { n: CONFIG.PRO_MAX_SONGS }), t('plan.p3'), t('plan.p4')]);
+  fill('proList', [t('plan.p2'), t('plan.p1'), t('plan.p5'), t('plan.p6'), t('plan.p4'), t('plan.p3')]);
 }
 
 function renderPlan() {
@@ -435,7 +509,7 @@ function appleLink(url) {
   return u.toString();
 }
 
-function renderResult() {
+function renderResult({ animate = false } = {}) {
   const r = state.result;
   if (!r) return;
   $('result').hidden = false;
@@ -446,7 +520,7 @@ function renderResult() {
   const parts = [t('stats.songs', { n: r.tracks.length }), t('stats.artists', { n: st.artists || '?' })];
   if (st.similarUsed) parts.push(t('stats.similar', { n: st.similarUsed }));
   parts.push(t('stats.real'));
-  $('stats').textContent = parts.join(' · ');
+  $('stats').innerHTML = parts.map((x) => `<span>${esc(x)}</span>`).join('');
 
   const imgs = [...new Set(r.tracks.map((x) => x.art).filter(Boolean))].slice(0, 4);
   const cover = $('cover');
@@ -457,7 +531,8 @@ function renderResult() {
   list.replaceChildren();
   r.tracks.forEach((x, i) => {
     const li = document.createElement('li');
-    li.className = 'track';
+    li.className = animate ? 'track enter' : 'track';
+    li.style.setProperty('--i', Math.min(i, 30));
     li.dataset.id = x.id;
     const why = x.role === 'similar' && x.because && !x.aiPick ? `<span class="why">${esc(t('why.similar', { artist: x.because }))}</span>` : '';
     const sp = `https://open.spotify.com/search/${encodeURIComponent(`${x.title} ${firstArtist(x.artist)}`)}`;
@@ -470,8 +545,10 @@ function renderResult() {
       `<div class="tlinks">` +
       `<a href="${esc(sp)}" target="_blank" rel="noopener" title="${esc(t('track.spotify'))}" aria-label="${esc(t('track.spotify'))}">S</a>` +
       (am ? `<a href="${esc(am)}" target="_blank" rel="noopener" title="${esc(t('track.apple'))}" aria-label="${esc(t('track.apple'))}">♫</a>` : '') +
+      `<button class="swap${isPro() ? '' : ' locked'}" type="button" title="${esc(t('track.swap'))}" aria-label="${esc(t('track.swap'))}">↻</button>` +
       `<button class="remove" type="button" aria-label="${esc(t('track.remove'))}">×</button></div>`;
     li.querySelector('.play')?.addEventListener('click', () => togglePreview(x));
+    li.querySelector('.swap').addEventListener('click', () => swapTrack(i));
     li.querySelector('.remove').addEventListener('click', () => { r.tracks.splice(i, 1); renderResult(); });
     list.append(li);
   });
@@ -487,6 +564,7 @@ function renderLanguage() {
   renderPlanLists();
   renderPlan();
   renderAccount();
+  renderHistory();
   if (state.result) renderResult();
 }
 
@@ -504,7 +582,10 @@ function bind() {
   });
   $('artistInput').addEventListener('blur', (e) => { if (e.target.value.trim()) { addArtist(e.target.value); e.target.value = ''; } });
   $('artistTags').addEventListener('click', (e) => { if (e.target === e.currentTarget) $('artistInput').focus(); });
-  $('count').addEventListener('input', renderCount);
+  $('count').addEventListener('input', () => { $('countExact').value = $('count').value; renderCount(); });
+  $('countExact').addEventListener('input', renderCount);
+  $('prompt').addEventListener('input', bumpVu);
+  $('historyLocked').addEventListener('click', proOnly);
   $('surprise').addEventListener('input', () => { $('surpriseOut').textContent = surpriseLabel(Number($('surprise').value)); });
   $('save').addEventListener('click', save);
   $('again').addEventListener('click', () => generate({ more: true }));
@@ -533,7 +614,7 @@ async function init() {
     u.searchParams.delete('pro');
     history.replaceState(null, '', u.pathname + u.search);
   }
-  if (proSession) unlockPro(proSession, true);
+  if (proSession) { unlockPro(proSession, true); renderHistory(); renderCount(); }
 
   if (spotify.spotifyEnabled()) {
     const err = await spotify.handleCallback();

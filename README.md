@@ -21,9 +21,11 @@ No usa datos de Spotify para recomendar: su política prohíbe analizarlos o pas
 | | Gratis | Pro (4,99 € pago único, IVA incluido) |
 |---|---|---|
 | Playlists | 3 al día | ilimitadas |
-| Canciones | hasta 30 | hasta 100 |
+| Canciones | hasta 30 | ilimitadas |
 | IA | gratuita (Pollinations) | la misma, gratuita |
 | Descripción | "Made with Vibelist" | sin marca |
+| Cambiar una canción por otra parecida | — | sí |
+| Historial de playlists | — | sí |
 
 - El cobro es un **Stripe Payment Link** (`PRO_PAYMENT_LINK` en `public/config.js`). Stripe gestiona IVA y facturas (Managed Payments, 3,5 % por venta).
 - Al pagar, Stripe redirige a `/?pro_session={CHECKOUT_SESSION_ID}` y la web activa Pro en ese navegador. No hay servidor ni claves secretas.

@@ -94,14 +94,14 @@ function limited(fn) {
   });
 }
 
-async function getJSON(url, { retries = 1 } = {}) {
+async function getJSON(url, { retries = 3 } = {}) {
   if (cache.has(url)) return cache.get(url);
   const p = limited(async () => {
     for (let i = 0; ; i++) {
       const res = await fetch(url);
       if (res.ok) return res.json();
       if (i >= retries || ![403, 429, 503].includes(res.status)) throw new Error(`HTTP ${res.status}`);
-      await sleep(2500 * (i + 1));
+      await sleep(4000 * (i + 1));
     }
   });
   cache.set(url, p);
@@ -234,7 +234,7 @@ export async function buildPlaylist(input, brief, { onStatus = () => {}, exclude
   let similar = [];
   if (!(input.onlyArtists && requested.length)) {
     const graph = await similarArtists(seeds.slice(0, 3)).catch(() => []);
-    const k = clamp(Math.round(n / 3), 4, 14);
+    const k = clamp(Math.round(n / 3), 4, 40);
     const start = Math.round(s * s * k * 1.2); // más sorpresa → se salta a los más obvios
     similar = graph.slice(start, start + k);
   }
@@ -246,7 +246,7 @@ export async function buildPlaylist(input, brief, { onStatus = () => {}, exclude
     poolArtists.push({ name, role, ...extra });
   };
   requested.forEach((a) => addPool(a, 'requested'));
-  const seedLimit = input.onlyArtists && requested.length ? 0 : clamp(Math.round(n / 4), 3, 10);
+  const seedLimit = input.onlyArtists && requested.length ? 0 : clamp(Math.round(n / 4), 3, 20);
   seeds.filter((a) => !reqKeys.has(norm(a))).slice(0, seedLimit).forEach((a) => addPool(a, 'seed'));
   similar.forEach((x) => addPool(x.name, 'similar', { sim: x.best, because: x.because }));
 
@@ -334,8 +334,12 @@ export async function buildPlaylist(input, brief, { onStatus = () => {}, exclude
   });
   for (const t of scored) { if (picked.length >= n) break; take(t); }
 
+  // Sobrantes ordenados por puntuación: sirven para "cambiar canción" (Pro).
+  const rest = scored.filter((t) => !picked.includes(t)).slice(0, 200)
+    .map(({ score, ...t }) => t);
   return {
     tracks: arrange(picked),
+    rest,
     stats: {
       aiVerified: picked.filter((t) => t.aiPick).length,
       aiProposed: brief.tracks.length,
